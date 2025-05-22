@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
+import os
 from query_engine import rag_query
 
-st.set_page_config(page_title="True Smart Kitchen – Smart Vendor Assistant", page_icon="📦", layout="centered")
+st.set_page_config(page_title="True Smart Kitchen – Smart Vendor Assistant", page_icon="📦", layout="wide")
 
-# === Professional UI Styling ===
 st.markdown("""
     <style>
         html, body {
@@ -50,16 +50,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📦 True Smart Kitchen – Smart Vendor Assistant")
-st.markdown("#### Ask questions like 'What should I buy next week?' or 'Did Sysco supply butter last month?'")
 
 @st.cache_data
 def load_data():
     forecast_df = pd.read_csv("data/simulated_forecast.csv")
     vendor_df = pd.read_csv("data/enriched_vendor_summaries.csv")
-    return forecast_df, vendor_df
+    if "monthly_sales.csv" in os.listdir("data"):
+        sales_df = pd.read_csv("data/monthly_sales.csv", encoding="utf-8-sig")
+        sales_df.columns = sales_df.columns.str.strip().str.replace('\ufeff', '')
+    else:
+        sales_df = None
+    return forecast_df, vendor_df, sales_df
 
 def recommend_vendors():
-    forecast_df, vendor_df = load_data()
+    forecast_df, vendor_df, _ = load_data()
     forecast_df["Quantity"] = pd.to_numeric(forecast_df["Quantity"], errors="coerce") * 3
     forecast_df["Forecast (lbs)"] = (forecast_df["Quantity"] * 2.20462).round(2)
 
@@ -123,58 +127,90 @@ def get_forecast_response(item_name):
     else:
         return f"⚠️ Forecast not found for **{item_name.title()}**. Try asking about another item."
 
-# === Main App Logic ===
-query = st.text_input("What do you want to know?", placeholder="e.g. What should I buy next week?")
+# === Tabs ===
+tabs = st.tabs(["📊 Dashboard", "📦 Inventory Forecast & Vendor Plan"])
 
-if st.button("🔍 Get Recommendation") and query:
-    with st.spinner("Consulting AI..."):
-        q = query.lower()
-        forecast_keywords = ["how much", "how many", "order", "quantity", "amount", "do we need", "forecast", "demand"]
+# === Tab 1: Dashboard ===
+forecast_df, vendor_df, sales_df = load_data()
+with tabs[0]:
+    st.subheader("📈 Last 6 Months Sales Overview")
+    if sales_df is not None:
+        monthly_sales = sales_df.groupby("Month")["Sales"].sum().reset_index()
+        st.bar_chart(monthly_sales.set_index("Month"))
 
-        if any(k in q for k in ["what should i buy", "purchase plan", "next week's purchase", "savings opportunities", "top items", "vendors to use"]):
-            forecast_lbs, top, others, savings, cost = recommend_vendors()
-            st.markdown("## 🧠 AI-Powered Procurement Plan")
-            st.caption("Based on real-time forecast and historical vendor trends")
-            st.subheader("📦 Forecasted Demand (lbs)")
-            st.dataframe(forecast_lbs)
+        recent_sales = monthly_sales["Sales"].tail(3).values
+        if len(recent_sales) >= 2:
+            growth = (recent_sales[-1] - recent_sales[-2])
+            forecast_next = int(recent_sales[-1] + growth)
+            next_month = pd.to_datetime(monthly_sales["Month"].iloc[-1]) + pd.DateOffset(months=1)
+            next_month_label = next_month.strftime("%Y-%m")
+            st.markdown(f"### 🔮 Forecast for Next Month ({next_month_label})")
+            st.success(f"Projected Sales: **${forecast_next:,}** based on last trend 📈")
+    else:
+        st.warning("No sales data available.")
 
-            st.subheader("💰 Top Savings Opportunities")
-            st.caption("AI-identified cost-saving vendors for high-volume items")
-            for _, row in top.iterrows():
-                note = ""
-                if row["Estimated Savings"] > 100 or row["Forecast (lbs)"] > 40:
-                    note = " 🔔 **High-Impact Purchase!**"
-                st.markdown(
-                    f"- **{row['Item']}** → *{row['Vendor']}* → **{row['Forecast (lbs)']} lbs** → 💵 Save **${row['Estimated Savings']:.2f}**{note}"
-                )
+    st.subheader("🏆 Top 5 Selling Items")
+    if sales_df is not None:
+        top_items = sales_df.groupby("Item")["Sales"].sum().sort_values(ascending=False).head(5)
+        st.table(top_items.reset_index().rename(columns={"Sales": "Total Sales"}))
+    else:
+        st.warning("No item sales data available.")
 
-            st.subheader("✅ Other Recommended Items")
-            for _, row in others.iterrows():
-                st.markdown(f"- {row['Item']} → {row['Vendor']}")
+    st.markdown("---")
+    st.markdown("### 📌 Technical Highlights")
+    st.markdown("""
+    - 🔍 **Data Cleaning**: Used `pandas` to clean and structure historical vendor and forecast datasets.
+    - 📦 **Forecast Modeling**: Applied scaled historical demand and converted units to pounds (lbs) for easy ordering.
+    - 🧠 **LLM Integration**: Used OpenAI + LangChain RAG to handle vendor-related Q&A.
+    - 💰 **Optimization Engine**: Matched forecast demand to cheapest suppliers using price history.
+    - 📊 **Professional UI**: Streamlit dashboard with forecasting, cost savings, and business reporting.
+    """)
 
-            st.success(f"🟢 Estimated Weekly Savings: ${savings} | 📦 Total Spend: ${cost}")
-            st.markdown("💼 *Estimates based on a weekly sales volume of ~$30,000*")
+# === Tab 2: Forecast & Vendor Plan ===
+with tabs[1]:
+    query = st.text_input("What do you want to know?", placeholder="e.g. What should I buy next week?")
 
-            if savings >= 1000:
-                st.markdown(f"""
-                ### 📈 Profitability Forecast
-                Your top 10 items this week will save you **${savings}** if you follow this plan.
+    if st.button("🔍 Get Recommendation") and query:
+        with st.spinner("Consulting AI..."):
+            q = query.lower()
+            forecast_keywords = ["how much", "how many", "order", "quantity", "amount", "do we need", "forecast", "demand"]
 
-                ✅ Forecasted demand matched with cheapest suppliers  
-                ✅ Real-time quantity planning in **lbs**  
-                ✅ Profit margin protected before the week even starts
+            if any(k in q for k in ["what should i buy", "purchase plan", "next week's purchase", "savings opportunities", "top items", "vendors to use"]):
+                forecast_lbs, top, others, savings, cost = recommend_vendors()
+                st.markdown("## 🧠 AI-Powered Procurement Plan")
+                st.subheader("📦 Forecasted Demand (lbs)")
+                st.dataframe(forecast_lbs)
 
-                💡 *This makes your kitchen not just smarter — but more profitable every week.*
-                """)
-        elif any(k in q for k in forecast_keywords):
-            forecast_items = pd.read_csv("data/simulated_forecast.csv")["Item"].str.lower().tolist()
-            for item in forecast_items:
-                if item in q:
-                    response = get_forecast_response(item)
-                    st.markdown(response)
-                    st.stop()
-        else:
-            response = rag_query(query)
-            if not response.strip():
-                response = "🤖 This is a demo environment. Based on AI intelligence, assume historical vendor data is available."
-            st.markdown(response)
+                st.subheader("💰 Top Savings Opportunities")
+                for _, row in top.iterrows():
+                    note = " 🔔 **High-Impact Purchase!**" if row["Estimated Savings"] > 100 or row["Forecast (lbs)"] > 40 else ""
+                    st.markdown(f"- **{row['Item']}** → *{row['Vendor']}* → **{row['Forecast (lbs)']} lbs** → 💵 Save **${row['Estimated Savings']:.2f}**{note}")
+
+                st.subheader("✅ Other Recommended Items")
+                for _, row in others.iterrows():
+                    st.markdown(f"- {row['Item']} → {row['Vendor']}")
+
+                st.success(f"🟢 Estimated Weekly Savings: ${savings} | 📦 Total Spend: ${cost}")
+
+                if savings >= 1000:
+                    st.markdown(f"""
+                    ### 📈 Profitability Forecast
+                    Your top 10 items this week will save you **${savings}** if you follow this plan.
+
+                    ✅ Forecasted demand matched with cheapest suppliers  
+                    ✅ Real-time quantity planning in **lbs**  
+                    ✅ Profit margin protected before the week even starts
+
+                    💡 *This makes your kitchen not just smarter — but more profitable every week.*
+                    """)
+            elif any(k in q for k in forecast_keywords):
+                for item in forecast_df["Item"].str.lower():
+                    if item in q:
+                        response = get_forecast_response(item)
+                        st.markdown(response)
+                        st.stop()
+            else:
+                response = rag_query(query)
+                if not response.strip():
+                    response = "🤖 This is a demo environment. Based on AI intelligence, assume historical vendor data is available."
+                st.markdown(response)

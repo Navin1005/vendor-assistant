@@ -3,6 +3,8 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
+import os
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 forecast_df = pd.read_csv("data/simulated_forecast.csv")
 forecast_df["Item"] = forecast_df["Item"].str.lower()
