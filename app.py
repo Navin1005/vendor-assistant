@@ -184,7 +184,7 @@ elif st.session_state.page == "Forecast":
     if st.button("✅ Place Order Now"):
         order_id = f"ORD{random.randint(10000, 99999)}"
         delivery_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        total_amount = round(random.uniform(300, 900), 2)
+        total_amount = round(random.uniform(2000, 2500), 2)
 
         st.success("Order Placed Successfully!")
         st.markdown(f"""
