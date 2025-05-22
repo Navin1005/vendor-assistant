@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import os
+import random
+from datetime import datetime, timedelta
 from query_engine import rag_query
 
 st.set_page_config(page_title="True Smart Kitchen – Smart Vendor Assistant", page_icon="📦", layout="wide")
@@ -67,6 +69,7 @@ if st.session_state.page == "Welcome":
 
 # === Dashboard Page ===
 elif st.session_state.page == "Dashboard":
+    st.title("📊 AI-Powered Kitchen Analytics Dashboard")
     st.subheader("📈 Last 6 Months Sales Overview")
     if sales_df is not None:
         monthly_sales = sales_df.groupby("Month")["Sales"].sum().reset_index()
@@ -86,10 +89,10 @@ elif st.session_state.page == "Dashboard":
 
     st.markdown("### 📌 Technical Highlights")
     st.markdown("""
-    - 🔍 **Data Cleaning** with `pandas` to clean vendor invoices, normalize item names, unify units, and handle missing values and webscraping
-    - 🧠 **Forecast Algorithms**: ARIMA for univariate time series prediction on items with consistent historical patterns
-    - 📊 **Vendor Matching** Selected lowest average price per item using historical vendor performance 
-    - 🤖 **AI Q&A** Integrated LangChain + OpenAI GPT to answer natural language questions using contextual vendor summaries.
+    - 🔍 **Data Cleaning** with `pandas` to clean vendor invoices, normalize item names, unify units, and handle missing values and webscraping  
+    - 🧠 **Forecast Algorithms**: ARIMA for univariate time series prediction on items with consistent historical patterns  
+    - 📊 **Vendor Matching** Selected lowest average price per item using historical vendor performance  
+    - 🤖 **AI Q&A** Integrated LangChain + OpenAI GPT to answer natural language questions using contextual vendor summaries  
     - 💼 **Interactive UI** built with Streamlit
     """)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -99,6 +102,8 @@ elif st.session_state.page == "Dashboard":
 
 # === Forecast Page ===
 elif st.session_state.page == "Forecast":
+    st.title("🔮 Forecasting & Vendor Plan Assistant")
+
     def recommend_vendors():
         forecast_df["Quantity"] = pd.to_numeric(forecast_df["Quantity"], errors="coerce") * 3
         forecast_df["Forecast (lbs)"] = (forecast_df["Quantity"] * 2.20462).round(2)
@@ -173,7 +178,21 @@ elif st.session_state.page == "Forecast":
                 response = rag_query(query)
                 st.markdown(response)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    # === Place Order Simulation ===
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🛒 Finalize Your Purchase")
+    if st.button("✅ Place Order Now"):
+        order_id = f"ORD{random.randint(10000, 99999)}"
+        delivery_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        total_amount = round(random.uniform(300, 900), 2)
+
+        st.success("Order Placed Successfully!")
+        st.markdown(f"""
+        - 🧾 **Order ID**: `{order_id}`  
+        - 🚚 **Expected Delivery Date**: `{delivery_date}`  
+        - 💵 **Total Amount**: `${total_amount}`
+        """)
+
     if st.button("⬅️ Back to Dashboard"):
         st.session_state.page = "Dashboard"
         st.rerun()
